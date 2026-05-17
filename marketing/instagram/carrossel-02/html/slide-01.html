@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { width: 1080px; height: 1350px; overflow: hidden; background: #111; }
+.slide { width: 1080px; height: 1350px; position: relative; overflow: hidden; }
+.bg { width: 100%; height: 100%; object-fit: cover; object-position: center top; display: block; }
+.overlay { position: absolute; inset: 0; background: linear-gradient(to bottom, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.05) 35%, rgba(0,0,0,0.05) 50%, rgba(0,0,0,0.88) 100%); }
+.top-bar { position: absolute; top: 0; left: 0; right: 0; height: 6px; background: #E87A1E; }
+.brand { position: absolute; top: 28px; left: 36px; }
+.brand-text { font-family: 'Arial Black', Arial, sans-serif; font-size: 30px; font-weight: 900; letter-spacing: 4px; color: white; text-transform: uppercase; }
+.brand-text span { color: #E87A1E; }
+.badge { position: absolute; top: 28px; right: 36px; background: #E87A1E; color: white; font-family: Arial, sans-serif; font-size: 17px; font-weight: 700; letter-spacing: 1px; padding: 10px 22px; text-transform: uppercase; }
+.content { position: absolute; bottom: 0; left: 0; right: 0; padding: 50px 44px; }
+.label { font-family: Arial, sans-serif; font-size: 18px; font-weight: 700; letter-spacing: 4px; color: #E87A1E; text-transform: uppercase; margin-bottom: 14px; }
+.title { font-family: 'Arial Black', Arial, sans-serif; font-size: 72px; font-weight: 900; line-height: 1.0; color: white; text-transform: uppercase; margin-bottom: 16px; }
+.subtitle { font-family: Arial, sans-serif; font-size: 26px; color: rgba(255,255,255,0.75); letter-spacing: 1px; }
+.divider { width: 60px; height: 4px; background: #E87A1E; margin: 20px 0; }
+</style>
+</head>
+<body>
+<div class="slide">
+  <img class="bg" src="file:///Users/yagosantiago/Projetos%20Claude/ccos-ratos/dados/foto4.jpg" />
+  <div class="overlay"></div>
+  <div class="top-bar"></div>
+  <div class="brand"><span class="brand-text">YAGO <span>MODAS</span></span></div>
+  <div class="badge">Coleção Verão</div>
+  <div class="content">
+    <div class="label">Cores que chamam atenção</div>
+    <div class="title">Looks que te destacam</div>
+    <div class="divider"></div>
+    <div class="subtitle">A loja que vai até você ✦</div>
+  </div>
+</div>
+</body>
+</html>

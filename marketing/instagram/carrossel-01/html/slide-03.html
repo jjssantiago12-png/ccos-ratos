@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { width: 1080px; height: 1350px; overflow: hidden; background: #111; }
+.slide { width: 1080px; height: 1350px; position: relative; overflow: hidden; }
+.bg { width: 100%; height: 100%; object-fit: cover; object-position: center top; display: block; }
+.overlay { position: absolute; inset: 0; background: linear-gradient(to bottom, rgba(0,0,0,0.45) 0%, rgba(0,0,0,0.05) 30%, rgba(0,0,0,0.05) 55%, rgba(0,0,0,0.9) 100%); }
+.top-bar { position: absolute; top: 0; left: 0; right: 0; height: 6px; background: #E87A1E; }
+.brand { position: absolute; top: 28px; left: 36px; }
+.brand-text { font-family: 'Arial Black', Arial, sans-serif; font-size: 28px; font-weight: 900; letter-spacing: 4px; color: white; text-transform: uppercase; }
+.brand-text span { color: #E87A1E; }
+.content { position: absolute; bottom: 0; left: 0; right: 0; padding: 50px 44px; }
+.label { font-family: Arial, sans-serif; font-size: 17px; font-weight: 700; letter-spacing: 4px; color: #E87A1E; text-transform: uppercase; margin-bottom: 12px; }
+.title { font-family: 'Arial Black', Arial, sans-serif; font-size: 58px; font-weight: 900; line-height: 1.05; color: white; text-transform: uppercase; margin-bottom: 12px; }
+.divider { width: 50px; height: 4px; background: #E87A1E; margin: 18px 0; }
+.detail { font-family: Arial, sans-serif; font-size: 22px; color: rgba(255,255,255,0.7); }
+</style>
+</head>
+<body>
+<div class="slide">
+  <img class="bg" src="file:///Users/yagosantiago/Projetos%20Claude/ccos-ratos/dados/foto2.jpg" />
+  <div class="overlay"></div>
+  <div class="top-bar"></div>
+  <div class="brand"><span class="brand-text">YAGO <span>MODAS</span></span></div>
+  <div class="content">
+    <div class="label">Destaque da coleção</div>
+    <div class="title">Macacão esportivo azul</div>
+    <div class="divider"></div>
+    <div class="detail">Conforto e estilo do treino ao dia a dia</div>
+  </div>
+</div>
+</body>
+</html>

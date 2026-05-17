@@ -1,14 +1,52 @@
-# Claude Code OS — Kit Ratos de IA
+# Yago Modas — Claude Code OS
 
-Este repositório é o kit de boas-vindas do curso Claude Code OS.
+## O que é esse workspace
 
-Se você acabou de clonar esse repositório:
-1. Rode `/setup` pra configurar o sistema pro seu negócio (uns 5 minutos)
-2. Depois rode `/mapear` pra criar skills personalizadas pro que você faz no dia a dia
+Workspace de gestão e operação da Yago Modas — loja de roupas itinerante que percorre bairros e municípios do Espírito Santo, com co-gestão da loja física familiar.
+
+**Estrutura de pastas:**
+- `financeiro/fechamentos/` — fechamentos mensais PJ/PF, conciliação Bradesco
+- `financeiro/relatorios/` — relatórios pro contador Jean
+- `marketing/instagram/` — conteúdo e planejamento do Instagram
+- `marketing/whatsapp/` — campanhas e listas de transmissão
+- `marketing/flyers/` — artes e materiais visuais
+- `contatos/base-clientes/` — base de ~2.000 contatos por região/cidade/bairro
+- `rotas/` — agenda e organização de rotas por município
+- `dados/` — arquivos brutos, planilhas, extratos
+- `templates/skills/` — templates de skills prontos pra personalizar com /mapear
+- `templates/ferramentas/catalogo.md` — APIs e ferramentas disponíveis pra usar em skills
+
+## Sobre o negócio
+
+Yago opera a Yago Modas, loja de roupas itinerante com o slogan "A loja que vai até você", atendendo bairros e municípios do ES (Grande Vitória, Conceição da Barra) e MG (Venda Nova do Imigrante, Aimorés). Também co-gerencia uma loja física familiar, sendo responsável pelo fechamento financeiro mensal e comunicação com o contador.
+
+## O que mais fazemos aqui
+
+- Fechamento financeiro mensal (conciliação PJ/PF, predatados, conta Bradesco mista)
+- Relatórios e comunicação com o contador Jean
+- Gestão da base de contatos (~2.000 registros por região/cidade/bairro)
+- Campanhas de marketing via WhatsApp (listas de transmissão)
+- Criação de conteúdo e marketing para Instagram (construção do zero)
+- Organização de rotas e agenda de atendimento por município
+- Geração de flyers e materiais visuais
+
+## Clientes e contexto
+
+Atende clientes externos das lojas + uso interno para gestão, contabilidade e operação. Pai é o dono da loja física — Yago é responsável pelo financeiro e gestão.
+
+## Tom de voz
+
+Direto e profissional. Com o contador: português formal. Com clientes: tom próximo e comercial. Outputs sempre prontos pra copiar/colar, sem necessidade de retrabalho manual.
+
+## Ferramentas conectadas
+
+- Excel/planilhas — controle financeiro e base de contatos
+- WhatsApp — comunicação com clientes e campanhas
+- Bradesco — conta bancária mista PJ/PF
+- Claude — análises, automações, relatórios
+- IA — geração de imagens pra flyers
 
 ---
-
-<!-- Este arquivo será atualizado pelo /setup com o contexto do seu negócio. -->
 
 ## Contexto do negócio
 
@@ -80,7 +118,7 @@ Mostrar o que vai mudar antes de salvar. Não reformatar o arquivo inteiro, só 
 - Perguntas simples ou conversas sem ação
 - Mudanças que já foram salvas pelo bloco "Aprender com correções"
 
-**Dica:** se não sabe se algo mudou, rode `/atualizar` pra uma varredura completa.
+**Dica:** se o usuário não sabe se algo mudou, rodar `/atualizar` faz uma varredura completa.
 
 ---
 
