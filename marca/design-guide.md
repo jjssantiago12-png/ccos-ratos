@@ -49,20 +49,19 @@ Forte, comercial e urbano. Visual escuro com laranja como cor de impacto. Transm
 
 ## Logo
 
-- **Arquivo:** *(logo atual em processo de refinamento — solicitar ao Yago o arquivo PNG/SVG quando disponível)*
-- **Versão pra fundo escuro:** logo atual já é desenvolvida sobre fundo escuro
-- **Onde usar:** slide final do carrossel (CTA), header de propostas, slides de apresentação
-- **Tamanho sugerido:** largura entre 120–200px nos HTMLs
-- **Observação:** Logo e nome da marca são temporários — identidade visual será revisada no futuro
+- **Arquivo:** `marca/logo.png` (monograma YM 3D laranja + preto, com texto "YAGO MODAS" e slogan)
+- **Versão pra fundo escuro:** logo sobre fundo escuro — funciona diretamente
+- **Onde usar:** canto inferior direito de cards e stories, slide final do carrossel, header de propostas
+- **Tamanho sugerido:** largura entre 140–200px nos HTMLs
+- **Fallback CSS:** `YAGO MODAS` em Inter 900 — laranja + branco — caso o arquivo não esteja disponível
 
 ---
 
 ## Perfil do autor
 
-> Usado no estilo "tweet" do carrossel. Preenchido automaticamente no setup.
-
 - **Nome:** Yago Modas
-- **Handle:** @yagomodas *(confirmar handle real do Instagram)*
+- **Handle:** @yagomodass
+- **Instagram:** https://www.instagram.com/yagomodass/
 - **Foto:** *(adicionar quando disponível — ex: marca/foto-perfil.jpg)*
 - **Badge verificado:** não
 
