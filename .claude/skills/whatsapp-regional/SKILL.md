@@ -16,7 +16,8 @@ Skill em duas etapas: organizar a base de contatos pra criar as comunidades no W
 ## Contexto
 
 Antes de começar, ler `_contexto/empresa.md` pra lembrar:
-- Base: ~2.000 contatos em `contatos/base-clientes/LISTA_DE_CONTATOS.xls`
+- Base de contatos: `contatos/base-clientes/LISTA_DE_CONTATOS.xls` (~2.000 contatos)
+- Catálogo de produtos: `dados/catalogo-produtos.xls` — exportado do sistema Líder
 - Cidades atendidas: Grande Vitória, Conceição da Barra (ES), Venda Nova do Imigrante (ES), Aimorés (MG) e outras do ES
 - Operação itinerante — a loja visita cada região em datas agendadas
 - Canal principal de venda: presença física nas visitas
@@ -81,7 +82,10 @@ Usar quando o usuário quiser enviar uma mensagem pra um grupo específico.
 Perguntar (apenas o que não estiver claro):
 - "Qual cidade/grupo vai receber a mensagem?"
 - "Qual é o tipo? (agenda de visita / promoção / chegou peças novas / aviso geral)"
-- "Tem informação específica? (data da visita, nome do produto, % de desconto)"
+- "Tem informação específica? (data da visita, % de desconto, ou quer que eu sugira produtos do catálogo?)"
+
+**Se o tipo for promoção ou chegou peças novas:**
+Ler `dados/catalogo-produtos.xls` e sugerir produtos relevantes com nome, preço e tamanhos disponíveis. Apresentar as opções e deixar o usuário escolher qual destacar na mensagem.
 
 ### Passo 2 — Redigir a mensagem
 
