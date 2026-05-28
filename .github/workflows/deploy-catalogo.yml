@@ -1,0 +1,22 @@
+name: Publicar Catálogo
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'catalogo/**'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy para GitHub Pages
+        uses: JamesIves/github-pages-deploy-action@v4
+        with:
+          folder: catalogo
+          branch: gh-pages
+          clean: true
