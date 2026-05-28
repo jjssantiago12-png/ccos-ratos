@@ -205,7 +205,7 @@ html,body{{background:var(--bg);color:var(--txt);font-family:'Inter',sans-serif;
 
 /* CARD */
 .card{{background:var(--surface);border-radius:var(--r);overflow:hidden;border:1px solid var(--borda);display:flex;flex-direction:column}}
-.card-foto{{position:relative;aspect-ratio:3/4;background:var(--surface2);overflow:hidden;touch-action:pan-y;user-select:none}}
+.card-foto{{position:relative;aspect-ratio:3/4;background:var(--surface2);overflow:hidden;touch-action:none;user-select:none;cursor:pointer}}
 .slides-inner{{display:flex;height:100%;transition:transform .28s cubic-bezier(.4,0,.2,1);will-change:transform}}
 .slide{{flex:0 0 100%;height:100%}}
 .slide img{{width:100%;height:100%;object-fit:cover;display:block;pointer-events:none}}
@@ -517,7 +517,9 @@ function renderGrid(){{
         </div>
         ${{tamBadge}}${{secBadge}}
         <div class="foto-dots" id="dots${{p.cod}}">
-          <span class="dot ativo"></span><span class="dot"></span><span class="dot"></span>
+          <span class="dot ativo" onclick="event.stopPropagation();goToSlide(document.getElementById('fw${{p.cod}}'),0)"></span>
+          <span class="dot" onclick="event.stopPropagation();goToSlide(document.getElementById('fw${{p.cod}}'),1)"></span>
+          <span class="dot" onclick="event.stopPropagation();goToSlide(document.getElementById('fw${{p.cod}}'),2)"></span>
         </div>
       </div>
       <div class="card-info">
@@ -579,15 +581,21 @@ function syncDots(fw){{
   dots.forEach((d,i)=>{{d.style.display=i<n?'':'none';d.classList.toggle('ativo',i===idx);}});
 }}
 function initSwipe(fw){{
-  let x0=null,dragging=false,dx=0,t0;
+  let x0=null,y0=null,dragging=false,dx=0,dy=0,t0;
   const inner=fw.querySelector('.slides-inner');
-  fw.addEventListener('touchstart',e=>{{x0=e.touches[0].clientX;t0=Date.now();dragging=true;dx=0;inner.style.transition='none';}},{{passive:true}});
+  fw.addEventListener('touchstart',e=>{{x0=e.touches[0].clientX;y0=e.touches[0].clientY;t0=Date.now();dragging=false;dx=0;dy=0;inner.style.transition='none';}},{{passive:true}});
   fw.addEventListener('touchmove',e=>{{
-    if(!dragging)return;
+    if(x0===null)return;
     dx=e.touches[0].clientX-x0;
+    dy=e.touches[0].clientY-y0;
+    if(!dragging&&(Math.abs(dx)>8||Math.abs(dy)>8)){{
+      if(Math.abs(dx)>Math.abs(dy)){{dragging=true;}}else{{x0=null;return;}}
+    }}
+    if(!dragging)return;
+    e.preventDefault();
     const idx=parseInt(fw.dataset.idx)||0;
     inner.style.transform=`translateX(calc(-${{idx*100}}% + ${{dx}}px))`;
-  }},{{passive:true}});
+  }},{{passive:false}});
   fw.addEventListener('touchend',()=>{{
     if(!dragging)return;
     inner.style.transition='';dragging=false;
