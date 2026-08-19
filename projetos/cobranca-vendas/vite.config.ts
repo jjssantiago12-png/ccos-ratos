@@ -7,7 +7,11 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      injectRegister: 'auto',
+      // false: registramos a SW no main.tsx via virtual:pwa-register em vez do script
+      // injetado padrão — o script padrão só chama .register() e nunca recarrega a
+      // página quando uma versão nova é ativada, então quem já tinha o app aberto
+      // ficava preso na versão antiga até fechar e abrir de novo manualmente.
+      injectRegister: false,
       strategies: 'generateSW',
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,png,ico,woff2}'],
