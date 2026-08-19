@@ -1,7 +1,7 @@
 import { useMemo, useState, type FormEvent } from 'react'
 import type { Venda, Origem } from '../types'
 import { REGIOES, BAIRROS_GRANDE_VITORIA } from '../lib/listas'
-import { criarVenda, editarVenda } from '../db/repo'
+import { criarVenda, editarVenda, excluirVenda } from '../db/repo'
 
 function hojeISO(): string {
   return new Date().toISOString().slice(0, 10)
@@ -31,6 +31,7 @@ export default function FormVenda({ vendaExistente, onFechar }: { vendaExistente
   const [observacoes, setObservacoes] = useState(vendaExistente?.observacoes ?? '')
   const [origem, setOrigem] = useState<Origem>(vendaExistente?.origem ?? 'Campo')
   const [salvando, setSalvando] = useState(false)
+  const [excluindo, setExcluindo] = useState(false)
   const [erro, setErro] = useState('')
 
   async function enviar(e: FormEvent) {
@@ -63,6 +64,21 @@ export default function FormVenda({ vendaExistente, onFechar }: { vendaExistente
       onFechar()
     } finally {
       setSalvando(false)
+    }
+  }
+
+  async function excluir() {
+    if (!vendaExistente) return
+    const ok = window.confirm(
+      `Excluir de vez o lançamento de "${vendaExistente.cliente_nome}" (${vendaExistente.valor_devido.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })})? Essa ação não pode ser desfeita.`
+    )
+    if (!ok) return
+    setExcluindo(true)
+    try {
+      await excluirVenda(vendaExistente.id)
+      onFechar()
+    } finally {
+      setExcluindo(false)
     }
   }
 
@@ -154,6 +170,17 @@ export default function FormVenda({ vendaExistente, onFechar }: { vendaExistente
               {salvando ? 'Salvando...' : 'Salvar'}
             </button>
           </div>
+          {vendaExistente && (
+            <button
+              type="button"
+              className="btn-secundario btn-bloco"
+              onClick={excluir}
+              disabled={excluindo}
+              style={{ marginTop: 10, color: 'var(--vermelho)' }}
+            >
+              {excluindo ? 'Excluindo...' : 'Excluir esse lançamento'}
+            </button>
+          )}
         </form>
       </div>
     </div>
