@@ -33,7 +33,9 @@ Interno
 
 ## Regras específicas
 - `valor_pago` de uma venda NUNCA é escrito diretamente — é sempre a soma de `pagamentos` (local e no servidor via trigger). Não adicionar campo de edição manual pra isso.
-- Sync ainda não está ligada em produção — falta o usuário criar o projeto Supabase e rodar a migration (ver plano em `~/.claude/plans/modular-cooking-bird.md`)
+- **Sync com Supabase está ATIVA em produção** desde 2026-08-19 — projeto `chntgifkzgnxfyjjbrek`, testado de ponta a ponta com dois "aparelhos" simulados (criar venda num, ver aparecer no outro, dar baixa, valor bater dos dois lados via o trigger). `VITE_SUPABASE_URL`/`VITE_SUPABASE_ANON_KEY` configuradas no Vercel (env de produção) e em `.env.local`.
+- A chave usada é a **publishable** (`sb_publishable_...`), formato novo do Supabase — nunca usar a **secret** (`sb_secret_...`, veio junto quando o usuário criou o projeto) em nenhum lugar do app/código: ela ignora todo o RLS. Só foi usada uma vez, direto no terminal, pra limpar dado de teste — nunca gravada em arquivo.
+- **Projeto Supabase é free tier**: pausa automaticamente depois de ~7 dias sem uso. Se a sincronização parar de funcionar depois de um tempo sem ninguém abrir o app, o usuário precisa entrar no painel do Supabase e reativar o projeto manualmente.
 - Ícones do PWA em `public/icons/` são placeholder gerado — trocar se o usuário quiser identidade visual própria
 - `.gitignore` da raiz tem uma exceção específica pra essa pasta (normalmente `projetos/*` é todo ignorado) — ver comentário lá antes de mexer
 - **Importação da planilha é 100% client-side de propósito** (`ImportarPlanilha.tsx` + `importarPlanilha.ts`, code-split via `React.lazy`/`import()` dinâmico) — nunca transformar isso num asset estático empacotado no build nem mandar a planilha pro servidor. O deploy é público; dado real de cliente (nome/telefone/dívida) só pode entrar no app pela mão de quem está usando, nunca virar arquivo público do site.
