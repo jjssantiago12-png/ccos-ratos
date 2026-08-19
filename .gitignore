@@ -2,6 +2,7 @@
 .env
 .env.local
 .env.*
+!projetos/cobranca-vendas/.env.example
 
 # Arquivo gerado pelo /setup com MCPs específicos do usuário
 _configurar-mcps.md
@@ -22,7 +23,8 @@ dados/*.json
 clientes/
 propostas/
 conteudo/
-projetos/
+projetos/*
+!projetos/cobranca-vendas/
 briefings/
 trabalho/
 estudos/
@@ -31,7 +33,16 @@ anotacoes/
 curriculo/
 tarefas.md
 
+# projetos/cobranca-vendas/ é código de app (versionado) — mas dados reais de
+# cliente ficam de fora mesmo assim. Ícones do PWA precisam furar a regra
+# genérica "*.png" acima pra entrar no repo.
+projetos/cobranca-vendas/*.xlsx
+!projetos/cobranca-vendas/public/icons/*.png
+
 # Sistema
 .DS_Store
 node_modules/
+dist/
+.vercel/
+*.tsbuildinfo
 dados/video1.mp4
