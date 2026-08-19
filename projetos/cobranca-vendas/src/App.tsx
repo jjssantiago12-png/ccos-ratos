@@ -6,6 +6,7 @@ import { exportarPlanilhaControle } from './lib/exportarPlanilha'
 import type { Venda, VendaCalculada, Pagamento } from './types'
 import { estaLiberado } from './lib/sessao'
 import { iniciarSyncAutomatico } from './sync/syncEngine'
+import { limparLinhasFantasma } from './db/repo'
 import PortaoAcesso from './components/PortaoAcesso'
 import CartaoVenda from './components/CartaoVenda'
 import FormVenda from './components/FormVenda'
@@ -44,7 +45,9 @@ export default function App() {
   const [liberado, setLiberado] = useState(estaLiberado())
 
   useEffect(() => {
-    if (liberado) return iniciarSyncAutomatico()
+    if (!liberado) return
+    void limparLinhasFantasma()
+    return iniciarSyncAutomatico()
   }, [liberado])
 
   if (!liberado) return <PortaoAcesso onEntrar={() => setLiberado(true)} />

@@ -85,6 +85,27 @@ export async function listarPagamentos(vendaId: string): Promise<Pagamento[]> {
   return db.pagamentos.where('venda_id').equals(vendaId).sortBy('data')
 }
 
+// Nomes de linha de rodapé da planilha (ex: "TOTAIS", "Clientes Atrasados:") que
+// entraram como "cliente" fantasma em importações feitas antes do filtro existir em
+// importarPlanilha.ts. A importação atual já não recria isso, mas quem já tinha essas
+// linhas salvas localmente (de uma importação antiga) fica com elas presas — reimportar
+// não remove o que não é mais gerado. Roda sozinho a cada abertura do app pra limpar
+// sem depender de ninguém achar um botão de excluir.
+const NOMES_FANTASMA = [/^totais$/i, /^clientes atrasados:?$/i]
+
+export async function limparLinhasFantasma(): Promise<number> {
+  const todas = await db.vendas.toArray()
+  const fantasmas = todas.filter((v) => NOMES_FANTASMA.some((padrao) => padrao.test(v.cliente_nome.trim())))
+  if (fantasmas.length === 0) return 0
+  await db.transaction('rw', db.vendas, db.pagamentos, async () => {
+    for (const v of fantasmas) {
+      await db.pagamentos.where('venda_id').equals(v.id).delete()
+      await db.vendas.delete(v.id)
+    }
+  })
+  return fantasmas.length
+}
+
 /** bulkPut faz upsert por id — reimportar a mesma planilha não duplica nada. */
 export async function importarVendasEPagamentos(vendas: Venda[], pagamentos: Pagamento[]): Promise<void> {
   await db.transaction('rw', db.vendas, db.pagamentos, async () => {
