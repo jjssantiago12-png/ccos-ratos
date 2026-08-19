@@ -15,6 +15,7 @@ Workspace de gestão e operação da Yago Modas — loja de roupas itinerante qu
 - `dados/` — arquivos brutos, planilhas, extratos
 - `templates/skills/` — templates de skills prontos pra personalizar com /mapear
 - `templates/ferramentas/catalogo.md` — APIs e ferramentas disponíveis pra usar em skills
+- `projetos/cobranca-vendas/` — app PWA de cobrança de vendas consignadas (offline, WhatsApp, ranking de inadimplência)
 
 ## Sobre o negócio
 
