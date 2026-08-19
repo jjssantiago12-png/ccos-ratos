@@ -11,6 +11,7 @@ Organização e estruturação — implantando controle de estoque integrado e c
 3. Manter o fechamento financeiro mensal em dia (conta Bradesco mista PJ/PF + comunicação com contador Jean)
 4. Adequar a contabilidade à reforma tributária de 2025 — verificar parâmetros e obrigações específicas pra empresas no novo regime
 5. Separar as contas PJ e PF com clareza — por ser empresa familiar, as contas se misturam; meta é atingir um planejamento financeiro mais estável e legível
+6. App de cobrança de vendas consignadas (`projetos/cobranca-vendas/`) — substitui o controle em papel/planilha do pai (vendedor externo) por um PWA offline com ranking de inadimplência e cobrança via WhatsApp. MVP já publicado em https://cobranca-vendas.vercel.app (modo local, por aparelho); falta configurar o Supabase pra sincronizar entre os funcionários
 
 ## O que pode esperar
 
