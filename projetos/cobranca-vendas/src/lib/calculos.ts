@@ -61,6 +61,19 @@ export function ordenarPorRanking(vendas: VendaCalculada[]): VendaCalculada[] {
   return [...vendas].sort((a, b) => b.score_cobranca - a.score_cobranca)
 }
 
+export type FiltroData = 'todas' | 'semana' | 'mes'
+
+/** Vencimento cai entre hoje e daqui 7/30 dias — não inclui o que já venceu (isso já é
+ * coberto pela aba de status "Cobrar"; esse filtro é sobre o que está por vir). */
+export function vendaNoFiltroData(venda: Venda, filtro: FiltroData, hoje: Date = new Date()): boolean {
+  if (filtro === 'todas') return true
+  const dias = filtro === 'semana' ? 7 : 30
+  const hojeDia = paraDiaUTC(hoje)
+  const vencimentoDia = paraDiaUTC(venda.data_vencimento)
+  const limite = hojeDia + dias * MS_POR_DIA
+  return vencimentoDia >= hojeDia && vencimentoDia <= limite
+}
+
 function round2(n: number): number {
   return Math.round(n * 100) / 100
 }

@@ -72,6 +72,15 @@ export async function listarVendas(): Promise<Venda[]> {
   return db.vendas.toArray()
 }
 
+/** Apaga uma venda e os pagamentos dela. Só local (sem sync na nuvem ativo ainda) —
+ * usado pra limpar duplicidade de lançamento, não é uma operação do dia a dia. */
+export async function excluirVenda(id: string): Promise<void> {
+  await db.transaction('rw', db.vendas, db.pagamentos, async () => {
+    await db.pagamentos.where('venda_id').equals(id).delete()
+    await db.vendas.delete(id)
+  })
+}
+
 export async function listarPagamentos(vendaId: string): Promise<Pagamento[]> {
   return db.pagamentos.where('venda_id').equals(vendaId).sortBy('data')
 }

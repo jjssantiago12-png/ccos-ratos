@@ -1,5 +1,6 @@
 import type { VendaCalculada } from '../types'
 import { linkCobrancaWhatsapp } from '../lib/whatsapp'
+import { infoParcela } from '../lib/clientes'
 
 const CLASSE_SELO: Record<VendaCalculada['status'], string> = {
   Atrasado: 'selo selo-atrasado',
@@ -26,6 +27,7 @@ export default function CartaoVenda({
   onEditar: () => void
 }) {
   const local = venda.regiao === 'Grande Vitória' && venda.bairro ? venda.bairro : venda.regiao
+  const parcela = infoParcela(venda)
 
   return (
     <div className="cartao">
@@ -34,6 +36,7 @@ export default function CartaoVenda({
           <div className="cartao-nome">{venda.cliente_nome}</div>
           <div className="cartao-local">
             {local} · venceu {formatarData(venda.data_vencimento)}
+            {parcela && ` · Parcela ${parcela.numero}/${parcela.total}`}
             {venda.origem === 'Campo' && ' · sem nota fiscal ainda'}
           </div>
         </div>
@@ -45,6 +48,9 @@ export default function CartaoVenda({
       <div className="cartao-valores">
         <div>
           <div className="valor-restante">{formatarMoeda(venda.restante)}</div>
+          {venda.valor_pago > 0 && venda.status !== 'Quitado' && (
+            <div className="valor-detalhe">já recebeu {formatarMoeda(venda.valor_pago)} dessa parcela</div>
+          )}
           {venda.acrescimo > 0 && (
             <div className="valor-detalhe">inclui {formatarMoeda(venda.acrescimo)} de acréscimo</div>
           )}

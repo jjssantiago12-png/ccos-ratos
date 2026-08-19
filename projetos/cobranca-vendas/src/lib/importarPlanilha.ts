@@ -48,7 +48,28 @@ function paraTexto(valor: unknown): string {
   return String(valor).trim()
 }
 
-export async function importarPlanilhaControle(arquivo: ArrayBuffer): Promise<ResultadoImportacao> {
+// Chave de negócio SEM "data da venda" — o Líder pode reexportar a mesma parcela com
+// essa data recarimbada (ex: refletindo a última tentativa de cobrança), e se ela
+// entrasse na chave, a mesma dívida real virava um registro novo a cada reexport em
+// vez de atualizar o existente. Usa observações (traz o nº do pedido/parcela, ex:
+// "PED584-1/1") como desempate — cliente+vencimento+valor sozinhos colidem em casos
+// reais (duas vendas distintas da mesma cliente, coincidentemente mesmo valor e
+// vencimento, mas pedidos diferentes) e a data da venda não é confiável pro desempate.
+function chaveNegocio(
+  origem: Origem,
+  codigoCliente: string,
+  nome: string,
+  dataVencimento: string,
+  valorDevido: number,
+  observacoes: string
+): string {
+  return `${origem}|${codigoCliente}|${nome.trim().toLowerCase()}|${dataVencimento}|${valorDevido}|${observacoes.trim()}`
+}
+
+export async function importarPlanilhaControle(
+  arquivo: ArrayBuffer,
+  vendasExistentes: Venda[] = []
+): Promise<ResultadoImportacao> {
   // import dinâmico: a lib de parsing de xlsx é pesada (~350kB) e só é usada nessa
   // tela ocasional de importação — não faz sentido pesar no carregamento do dia a dia.
   const XLSX = await import('xlsx')
@@ -66,11 +87,23 @@ export async function importarPlanilhaControle(arquivo: ArrayBuffer): Promise<Re
   const avisos: AvisoImportacao[] = []
   const agora = new Date().toISOString()
 
+  const idsPorChaveExistente = new Map<string, string>()
+  for (const v of vendasExistentes) {
+    idsPorChaveExistente.set(
+      chaveNegocio(v.origem, v.codigo_cliente, v.cliente_nome, v.data_vencimento, v.valor_devido, v.observacoes),
+      v.id
+    )
+  }
+
   for (let i = 0; i < linhas.length; i++) {
     const linha = linhas[i]
     const numeroLinha = i + 5
     const nome = paraTexto(linha[1])
     if (!nome) continue // linha vazia/sem cliente, ignora
+    // linhas de rodapé da planilha (ex: "TOTAIS", "Clientes Atrasados:") têm nome na
+    // coluna B mas não têm número em "Nº" (coluna A) — todo cliente real tem. Sem esse
+    // filtro, o rodapé vira um "cliente" fantasma com o valor total da carteira.
+    if (typeof linha[0] !== 'number') continue
 
     const celular = paraTexto(linha[2])
     const regiao = paraTexto(linha[3]) || '(conferir)'
@@ -106,11 +139,11 @@ export async function importarPlanilhaControle(arquivo: ArrayBuffer): Promise<Re
       avisos.push({ linha: numeroLinha, cliente: nome, motivo: avisosLinha.join(', ') })
     }
 
-    // inclui data_vencimento na chave: é comum o mesmo cliente ter várias parcelas da
-    // mesma venda (mesma data de venda, mesmo valor por parcela) diferenciadas só pelo
-    // vencimento — sem isso, parcelas distintas colidiam no mesmo id e se sobrescreviam
-    const chaveVenda = `venda|${origem}|${codigoCliente}|${nome}|${dataVenda}|${dataVencimento}|${valorDevido}`
-    const id = await idDeterministico(chaveVenda)
+    // se já existe uma venda com essa mesma chave de negócio (mesmo que salva antes
+    // dessa mudança, com id calculado de outro jeito), reaproveita o id dela — assim a
+    // importação atualiza o registro existente em vez de criar um duplicado
+    const chave = chaveNegocio(origem, codigoCliente, nome, dataVencimento, valorDevido, observacoes)
+    const id = idsPorChaveExistente.get(chave) ?? (await idDeterministico(`venda|${chave}`))
 
     vendas.push({
       id,
@@ -146,14 +179,17 @@ export async function importarPlanilhaControle(arquivo: ArrayBuffer): Promise<Re
   }
 
   // rede de segurança: se por algum motivo duas linhas ainda gerarem o mesmo id
-  // (chave de negócio igual por coincidência), um bulkPut simplesmente sobrescreveria
-  // uma venda de verdade sem avisar ninguém — preferível travar a importação inteira
-  // e deixar quem está importando decidir, a perder dívida de cliente silenciosamente.
+  // (mesmo cliente/código, mesmo vencimento e mesmo valor), um bulkPut simplesmente
+  // sobrescreveria uma venda de verdade sem avisar ninguém — preferível travar a
+  // importação inteira e deixar quem está importando decidir, a perder dívida de
+  // cliente silenciosamente. Se for coincidência real (duas parcelas genuinamente
+  // distintas com mesmo valor/vencimento), ajusta um dos dois na planilha (ex: 1
+  // centavo de diferença) antes de reimportar.
   const idsVistos = new Set<string>()
   for (const v of vendas) {
     if (idsVistos.has(v.id)) {
       throw new Error(
-        `Duas linhas da planilha (mesmo cliente, mesma data de venda/vencimento e valor) geraram o mesmo registro — provável duplicata real na planilha. Cliente: "${v.cliente_nome}". Confere as linhas desse cliente antes de importar de novo.`
+        `Duas linhas da planilha (mesmo cliente, mesmo vencimento e mesmo valor) geraram o mesmo registro — provável duplicata real na planilha. Cliente: "${v.cliente_nome}". Confere as linhas desse cliente antes de importar de novo.`
       )
     }
     idsVistos.add(v.id)

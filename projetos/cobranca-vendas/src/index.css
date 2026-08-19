@@ -248,6 +248,17 @@ button {
   text-align: center;
 }
 
+.cartao-clicavel {
+  display: block;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+}
+
+.cartao-clicavel:active {
+  border-color: var(--acento);
+}
+
 .fab {
   position: fixed;
   right: 20px;

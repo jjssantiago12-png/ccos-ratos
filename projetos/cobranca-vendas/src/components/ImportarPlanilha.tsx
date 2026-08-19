@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { importarPlanilhaControle, type ResultadoImportacao } from '../lib/importarPlanilha'
-import { importarVendasEPagamentos } from '../db/repo'
+import { importarVendasEPagamentos, listarVendas } from '../db/repo'
 
 type Etapa = 'escolher' | 'lendo' | 'revisar' | 'importando' | 'concluido'
 
@@ -16,7 +16,8 @@ export default function ImportarPlanilha({ onFechar }: { onFechar: () => void })
     setEtapa('lendo')
     try {
       const buffer = await arquivo.arrayBuffer()
-      const res = await importarPlanilhaControle(buffer)
+      const vendasExistentes = await listarVendas()
+      const res = await importarPlanilhaControle(buffer, vendasExistentes)
       setResultado(res)
       setEtapa('revisar')
     } catch (err) {
