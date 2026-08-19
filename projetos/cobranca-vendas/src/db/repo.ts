@@ -1,10 +1,10 @@
 import { db, novoId, agoraISO } from './dexie'
-import type { Venda, Pagamento, Origem, Regiao } from '../types'
+import type { Venda, Pagamento, Origem } from '../types'
 
 export interface NovaVendaInput {
   cliente_nome: string
   cliente_celular: string
-  regiao: Regiao
+  regiao: string
   bairro: string
   codigo_cliente: string
   data_venda: string
@@ -74,6 +74,14 @@ export async function listarVendas(): Promise<Venda[]> {
 
 export async function listarPagamentos(vendaId: string): Promise<Pagamento[]> {
   return db.pagamentos.where('venda_id').equals(vendaId).sortBy('data')
+}
+
+/** bulkPut faz upsert por id — reimportar a mesma planilha não duplica nada. */
+export async function importarVendasEPagamentos(vendas: Venda[], pagamentos: Pagamento[]): Promise<void> {
+  await db.transaction('rw', db.vendas, db.pagamentos, async () => {
+    await db.vendas.bulkPut(vendas)
+    await db.pagamentos.bulkPut(pagamentos)
+  })
 }
 
 export async function contarPendentesSync(): Promise<number> {

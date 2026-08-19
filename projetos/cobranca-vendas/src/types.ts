@@ -15,7 +15,10 @@ export interface Venda {
   id: string
   cliente_nome: string
   cliente_celular: string
-  regiao: Regiao
+  // string livre (não o union `Regiao`) pra não perder vendas importadas da planilha
+  // com valor fora da lista conhecida (ex: "(conferir)") — REGIOES continua sendo a
+  // lista sugerida no formulário.
+  regiao: string
   bairro: string
   codigo_cliente: string
   data_venda: string // ISO date (yyyy-mm-dd)

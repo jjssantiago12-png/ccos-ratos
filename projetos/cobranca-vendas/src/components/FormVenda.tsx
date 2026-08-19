@@ -1,5 +1,5 @@
-import { useState, type FormEvent } from 'react'
-import type { Venda, Regiao, Origem } from '../types'
+import { useMemo, useState, type FormEvent } from 'react'
+import type { Venda, Origem } from '../types'
 import { REGIOES, BAIRROS_GRANDE_VITORIA } from '../lib/listas'
 import { criarVenda, editarVenda } from '../db/repo'
 
@@ -16,7 +16,13 @@ function em30DiasISO(): string {
 export default function FormVenda({ vendaExistente, onFechar }: { vendaExistente?: Venda; onFechar: () => void }) {
   const [nome, setNome] = useState(vendaExistente?.cliente_nome ?? '')
   const [celular, setCelular] = useState(vendaExistente?.cliente_celular ?? '')
-  const [regiao, setRegiao] = useState<Regiao>(vendaExistente?.regiao ?? 'Grande Vitória')
+  const [regiao, setRegiao] = useState<string>(vendaExistente?.regiao ?? 'Grande Vitória')
+  // se a venda veio da planilha com uma região fora da lista conhecida (ex: "(conferir)"),
+  // inclui ela como opção extra pra não sumir do formulário nem forçar troca sem querer
+  const opcoesRegiao = useMemo(
+    () => (REGIOES.includes(regiao as (typeof REGIOES)[number]) ? REGIOES : [regiao, ...REGIOES]),
+    [regiao]
+  )
   const [bairro, setBairro] = useState(vendaExistente?.bairro ?? '')
   const [codigoCliente, setCodigoCliente] = useState(vendaExistente?.codigo_cliente ?? '')
   const [dataVenda, setDataVenda] = useState(vendaExistente?.data_venda ?? hojeISO())
@@ -81,8 +87,8 @@ export default function FormVenda({ vendaExistente, onFechar }: { vendaExistente
           <div className="linha-2">
             <div className="campo">
               <label>Região/Cidade</label>
-              <select value={regiao} onChange={(e) => setRegiao(e.target.value as Regiao)}>
-                {REGIOES.map((r) => (
+              <select value={regiao} onChange={(e) => setRegiao(e.target.value)}>
+                {opcoesRegiao.map((r) => (
                   <option key={r} value={r}>
                     {r}
                   </option>

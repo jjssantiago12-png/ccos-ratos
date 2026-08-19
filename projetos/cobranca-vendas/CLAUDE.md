@@ -25,7 +25,8 @@ Interno
 ## Arquivos importantes
 - `src/lib/calculos.ts` — cálculo de juros/status/score (lógica de negócio central, funções puras)
 - `src/lib/whatsapp.ts` — geração do link `wa.me` e texto da cobrança
-- `src/db/dexie.ts` / `src/db/repo.ts` — schema local e operações (criar venda, dar baixa)
+- `src/lib/importarPlanilha.ts` — importa a planilha de campo (.xlsx) direto no navegador, sem passar por servidor
+- `src/db/dexie.ts` / `src/db/repo.ts` — schema local e operações (criar venda, dar baixa, importar)
 - `src/sync/syncEngine.ts` — sincronização com Supabase (push/pull, last-write-wins)
 - `supabase/migrations/0001_init.sql` — schema Postgres, trigger de recálculo de valor_pago, RLS
 - `.env.example` — variáveis necessárias (Supabase URL/key, PIN do app)
@@ -35,3 +36,6 @@ Interno
 - Sync ainda não está ligada em produção — falta o usuário criar o projeto Supabase e rodar a migration (ver plano em `~/.claude/plans/modular-cooking-bird.md`)
 - Ícones do PWA em `public/icons/` são placeholder gerado — trocar se o usuário quiser identidade visual própria
 - `.gitignore` da raiz tem uma exceção específica pra essa pasta (normalmente `projetos/*` é todo ignorado) — ver comentário lá antes de mexer
+- **Importação da planilha é 100% client-side de propósito** (`ImportarPlanilha.tsx` + `importarPlanilha.ts`, code-split via `React.lazy`/`import()` dinâmico) — nunca transformar isso num asset estático empacotado no build nem mandar a planilha pro servidor. O deploy é público; dado real de cliente (nome/telefone/dívida) só pode entrar no app pela mão de quem está usando, nunca virar arquivo público do site.
+- A chave de deduplicação da importação (`importarPlanilha.ts`) precisa incluir `data_vencimento` — o mesmo cliente frequentemente tem várias parcelas da mesma venda com data de venda e valor iguais, só o vencimento muda. Sem isso, parcelas diferentes colidem no mesmo id gerado e uma sobrescreve a outra silenciosamente (bug real encontrado e corrigido — a importação tem uma checagem de duplicata que agora trava com erro em vez de perder dado nesse cenário)
+- Lib `xlsx` (SheetJS) é instalada a partir do CDN oficial (`https://cdn.sheetjs.com/...`), não do npm — a versão do npm tem vulnerabilidades altas sem correção publicada lá

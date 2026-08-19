@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from './db/dexie'
 import { calcularVendas, ordenarPorRanking } from './lib/calculos'
@@ -10,6 +10,8 @@ import CartaoVenda from './components/CartaoVenda'
 import FormVenda from './components/FormVenda'
 import FormBaixa from './components/FormBaixa'
 import BarraSync from './components/BarraSync'
+
+const ImportarPlanilha = lazy(() => import('./components/ImportarPlanilha'))
 
 type Aba = 'ranking' | 'em-dia' | 'quitado' | 'todos'
 
@@ -37,6 +39,7 @@ function AppPrincipal() {
   const [busca, setBusca] = useState('')
   const [vendaEmEdicao, setVendaEmEdicao] = useState<Venda | 'nova' | null>(null)
   const [vendaParaBaixa, setVendaParaBaixa] = useState<VendaCalculada | null>(null)
+  const [importando, setImportando] = useState(false)
 
   const vendasCalculadas = useMemo(() => calcularVendas(vendasBrutas), [vendasBrutas])
 
@@ -57,7 +60,12 @@ function AppPrincipal() {
   return (
     <div className="app">
       <div className="topo">
-        <h1>Cobrança Vendas</h1>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <h1>Cobrança Vendas</h1>
+          <button className="btn-secundario btn-pequeno" onClick={() => setImportando(true)}>
+            Importar planilha
+          </button>
+        </div>
         <div className="abas">
           {ABAS.map((a) => (
             <button key={a.chave} className={`aba ${aba === a.chave ? 'ativa' : ''}`} onClick={() => setAba(a.chave)}>
@@ -100,6 +108,11 @@ function AppPrincipal() {
         />
       )}
       {vendaParaBaixa && <FormBaixa venda={vendaParaBaixa} onFechar={() => setVendaParaBaixa(null)} />}
+      {importando && (
+        <Suspense fallback={null}>
+          <ImportarPlanilha onFechar={() => setImportando(false)} />
+        </Suspense>
+      )}
     </div>
   )
 }
