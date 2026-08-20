@@ -31,6 +31,26 @@ Interno
 - `supabase/migrations/0001_init.sql` — schema Postgres, trigger de recálculo de valor_pago, RLS
 - `.env.example` — variáveis necessárias (Supabase URL/key, PIN do app)
 
+## Diagnóstico de 2026-08-20 (5 especialistas + correções)
+Depois de ligar o sync em produção, rodei um diagnóstico com 5 agentes (security-auditor, backend-architect, code-reviewer, performance-engineer, devops-troubleshooter — ver `.claude/agents/`) sobre o app inteiro. Achou 10 problemas reais (5 críticos de dinheiro/dado, 5 secundários de robustez), todos corrigidos e testados com Playwright contra o Supabase real no mesmo dia:
+- Reimportar planilha não sobrescreve mais `valor_pago`/cria pagamento sintético pra venda que já existe — evita contar pagamento em dobro
+- `excluirVenda` propaga de verdade pro servidor via soft delete (`excluido_em`) — antes só apagava local e a venda "voltava" no próximo sync
+- Push de pagamentos usa `ignoreDuplicates: true` (não trava mais a fila inteira quando um pagamento já existe no servidor)
+- Trigger `recalcular_valor_pago` roda em INSERT/UPDATE/DELETE (antes só INSERT) e é `SECURITY DEFINER` (necessário depois de restringir o GRANT — ver abaixo)
+- Cursor de sincronização (`atualizado_em`) é mantido pelo servidor, não pelo relógio do aparelho
+- Pull é paginado com cursor composto `timestamp|id` (nunca só timestamp — ver bug abaixo)
+- `pagamentoEhParcial` considera o saldo acumulado da venda, não só o valor da baixa isolada
+- Tela de erro (`ErroFatal.tsx`) evita tela branca silenciosa se o app travar
+- Import trata erro (não fica preso em "Importando..." pra sempre)
+- Fuso horário correto no histórico de baixas pra pagamento importado
+
+**Dois bugs REAIS a mais encontrados testando (não estavam na lista dos 5 agentes):**
+1. **Corrida de sincronização**: uma baixa registrada bem no meio de um pull em andamento podia ser apagada pela resposta do pull chegando depois com dado antigo. Corrigido: o pull nunca sobrescreve uma venda com `synced_at = 0` (edição local ainda não enviada) — ver `syncEngine.ts`, dentro da transação de `pullVendas`.
+2. **Loop infinito na paginação nova**: a migration que criou a coluna `atualizado_em` via `ALTER TABLE ADD COLUMN DEFAULT now()` deu o MESMO instante pras 572 vendas já existentes (comportamento padrão do Postgres pra backfill de coluna nova) — um cursor só de timestamp nunca avançava. Corrigido com cursor composto `timestamp|id` via `.or('col.gt.X,and(col.eq.X,id.gt.Y)')` do PostgREST. **Se mexer em paginação/cursor de novo, sempre testar contra uma tabela com centenas de linhas empatadas no mesmo timestamp — é fácil de reproduzir esse bug sem perceber.**
+3. **REVOKE de coluna não bloqueava nada**: `revoke update (valor_pago) on vendas from anon` (migration 0002) não funcionou — testei direto e o anon ainda escrevia. Motivo: a chave anônima já tinha UPDATE na tabela INTEIRA concedido por padrão pelo Supabase; revogar só a coluna não estreita uma concessão mais ampla que já existe na tabela toda. Corrigido na migration 0003: `revoke update on vendas from anon` (tabela inteira) + `grant update (lista explícita de colunas seguras) on vendas to anon`. **Sempre que restringir uma coluna específica pro anon/authenticated no Supabase, testar com uma escrita direta via REST depois — não confiar que o REVOKE de coluna funcionou só porque rodou sem erro.**
+
+Migrations: `0001_init.sql` (schema inicial) → `0002_correcoes_diagnostico.sql` (atualizado_em, excluido_em, trigger insert/update/delete, constraints) → `0003_corrige_grant_valor_pago.sql` (conserta o REVOKE que não funcionava). As três já rodadas em produção.
+
 ## Regras específicas
 - `valor_pago` de uma venda NUNCA é escrito diretamente — é sempre a soma de `pagamentos` (local e no servidor via trigger). Não adicionar campo de edição manual pra isso.
 - **Sync com Supabase está ATIVA em produção** desde 2026-08-19 — projeto `chntgifkzgnxfyjjbrek`, testado de ponta a ponta com dois "aparelhos" simulados (criar venda num, ver aparecer no outro, dar baixa, valor bater dos dois lados via o trigger). `VITE_SUPABASE_URL`/`VITE_SUPABASE_ANON_KEY` configuradas no Vercel (env de produção) e em `.env.local`.
