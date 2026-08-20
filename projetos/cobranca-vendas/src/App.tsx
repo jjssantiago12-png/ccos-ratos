@@ -107,7 +107,7 @@ function AppPrincipal() {
               {exportando ? '...' : 'Exportar'}
             </button>
             <button className="btn-secundario btn-pequeno" onClick={() => setImportando(true)}>
-              Importar
+              Importar planilha
             </button>
           </div>
         </div>
@@ -157,8 +157,15 @@ function AppPrincipal() {
           <HistoricoBaixas pagamentos={pagamentosBrutos} vendas={vendasCalculadas} busca={busca} />
         ) : modo === 'dashboard' ? (
           <Dashboard vendas={vendasCalculadas} pagamentos={pagamentosBrutos} />
+        ) : filtradas.length === 0 && vendasCalculadas.length === 0 ? (
+          <div className="vazio">
+            <p>Nenhuma venda por aqui ainda.</p>
+            <button className="btn-primario" onClick={() => setImportando(true)}>
+              Importar planilha
+            </button>
+          </div>
         ) : filtradas.length === 0 ? (
-          <div className="vazio">Nenhuma venda por aqui ainda.</div>
+          <div className="vazio">Nenhuma venda encontrada com esse filtro.</div>
         ) : (
           <div className="lista">
             {filtradas.map((v) => (

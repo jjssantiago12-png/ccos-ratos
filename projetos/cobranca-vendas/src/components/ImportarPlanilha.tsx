@@ -46,8 +46,9 @@ export default function ImportarPlanilha({ onFechar }: { onFechar: () => void })
         {etapa === 'escolher' && (
           <>
             <p style={{ color: 'var(--texto-fraco)' }}>
-              Escolhe o arquivo .xlsx da planilha de controle (aba "CONTROLE"). Pode importar quantas vezes
-              precisar — reimportar não duplica, só atualiza.
+              Escolhe o arquivo .xlsx com a aba "CONTROLE" preenchida (tem um modelo em branco pronto em{' '}
+              <code>projetos/cobranca-vendas/modelos/</code>, com instruções na aba "LEIA-ME"). Pode importar
+              quantas vezes precisar — reimportar não duplica, só atualiza.
             </p>
             {erro && <div className="erro-texto">{erro}</div>}
             <input type="file" accept=".xlsx" onChange={aoEscolherArquivo} />
