@@ -150,14 +150,40 @@ async function pushExclusoes(): Promise<void> {
  * uma carteira grande o bastante fazia o pull trazer só uma fatia, avançar o cursor além
  * do que foi realmente salvo, e truncar o resto da carteira silenciosamente pra sempre
  * (a carteira já bateu 1146 linhas uma vez, então isso é um risco real, não teórico).
- * `.gte()` (inclusive) em vez de `.gt()`: reconsulta a última linha da página anterior de
- * propósito — bulkPut é upsert por id, então isso é inofensivo — pra nunca pular uma
- * linha que compartilhe o exato mesmo instante da fronteira da página. */
+ *
+ * Cursor composto "timestamp|id" em vez de só timestamp: achado testando de verdade — a
+ * migration que criou a coluna atualizado_em deu o MESMO instante (now() avaliado uma vez
+ * só) pras 572 vendas que já existiam, então um cursor só de timestamp nunca avançava (a
+ * mesma página de até 500 linhas voltava pra sempre, loop infinito de sincronização — sem
+ * paginação nenhuma isso nunca teria aparecido, mas com paginação em cima de uma tabela
+ * onde centenas de linhas empatam no mesmo instante, é praticamente garantido acontecer).
+ * `id` (uuid) desempata de forma sempre única, então "maior que o último (timestamp, id)
+ * já visto" sempre avança de verdade, empate ou não. */
+function filtroProximaPagina(ts: string, id: string): string {
+  return `atualizado_em.gt.${ts},and(atualizado_em.eq.${ts},id.gt.${id})`
+}
+
+/** Cursor salvo por uma versão anterior do app (só timestamp, sem "|id") não serve pra
+ * comparar com o formato novo — trata como "sem cursor" e recomeça o pull do zero uma
+ * vez (bulkPut é upsert por id, então refazer é só um pouco de trabalho extra, nunca
+ * incorreto), em vez de mandar um id inválido pro Postgres e travar a sincronização. */
+function cursorValido(cursor: string | null): string | null {
+  return cursor && cursor.includes('|') ? cursor : null
+}
+
 async function pullVendas(cursorInicial: string | null): Promise<void> {
-  let cursor = cursorInicial
+  let cursor = cursorValido(cursorInicial)
   for (;;) {
-    let query = supabase!.from('vendas').select('*').order('atualizado_em', { ascending: true }).limit(TAMANHO_PAGINA)
-    if (cursor) query = query.gte('atualizado_em', cursor)
+    let query = supabase!
+      .from('vendas')
+      .select('*')
+      .order('atualizado_em', { ascending: true })
+      .order('id', { ascending: true })
+      .limit(TAMANHO_PAGINA)
+    if (cursor) {
+      const i = cursor.lastIndexOf('|')
+      query = query.or(filtroProximaPagina(cursor.slice(0, i), cursor.slice(i + 1)))
+    }
     const { data, error } = await query
     if (error) throw error
     if (!data || data.length === 0) return
@@ -193,25 +219,45 @@ async function pullVendas(cursorInicial: string | null): Promise<void> {
     }
 
     await db.transaction('rw', db.vendas, db.pagamentos, async () => {
-      if (paraSalvar.length > 0) await db.vendas.bulkPut(paraSalvar)
+      // Corrida real encontrada testando: se alguém dá uma baixa (registrarPagamento)
+      // bem no meio de uma sincronização já em andamento (o pull dessa sincronização foi
+      // disparado ANTES da baixa existir), a resposta do pull chegava depois e
+      // sobrescrevia a venda com a versão antiga (sem a baixa), apagando ela da tela —
+      // sem isso, dar baixa num app com sync ligado é uma loteria de quem "vence" a
+      // corrida. Uma venda com synced_at = 0 tem edição local ainda não enviada; nunca
+      // aceita o pull por cima dela — a próxima sincronização manda essa edição primeiro
+      // e só então traz de volta a versão já reconciliada do servidor.
+      if (paraSalvar.length > 0) {
+        const idsSujosLocalmente = new Set(await db.vendas.where('synced_at').equals(0).primaryKeys())
+        const semConflito = paraSalvar.filter((v) => !idsSujosLocalmente.has(v.id))
+        if (semConflito.length > 0) await db.vendas.bulkPut(semConflito)
+      }
       for (const id of idsParaRemover) {
         await db.pagamentos.where('venda_id').equals(id).delete()
         await db.vendas.delete(id)
       }
     })
 
-    const ultimo = data[data.length - 1].atualizado_em
-    cursor = ultimo
-    await setCursor(CURSOR_VENDAS, ultimo)
+    const ultimaLinha = data[data.length - 1]
+    cursor = `${ultimaLinha.atualizado_em}|${ultimaLinha.id}`
+    await setCursor(CURSOR_VENDAS, cursor)
     if (data.length < TAMANHO_PAGINA) return
   }
 }
 
 async function pullPagamentos(cursorInicial: string | null): Promise<void> {
-  let cursor = cursorInicial
+  let cursor = cursorValido(cursorInicial)
   for (;;) {
-    let query = supabase!.from('pagamentos').select('*').order('criado_em', { ascending: true }).limit(TAMANHO_PAGINA)
-    if (cursor) query = query.gte('criado_em', cursor)
+    let query = supabase!
+      .from('pagamentos')
+      .select('*')
+      .order('criado_em', { ascending: true })
+      .order('id', { ascending: true })
+      .limit(TAMANHO_PAGINA)
+    if (cursor) {
+      const i = cursor.lastIndexOf('|')
+      query = query.or(`criado_em.gt.${cursor.slice(0, i)},and(criado_em.eq.${cursor.slice(0, i)},id.gt.${cursor.slice(i + 1)})`)
+    }
     const { data, error } = await query
     if (error) throw error
     if (!data || data.length === 0) return
@@ -228,9 +274,9 @@ async function pullPagamentos(cursorInicial: string | null): Promise<void> {
     }))
     await db.pagamentos.bulkPut(linhas)
 
-    const ultimo = data[data.length - 1].criado_em
-    cursor = ultimo
-    await setCursor(CURSOR_PAGAMENTOS, ultimo)
+    const ultimaLinha = data[data.length - 1]
+    cursor = `${ultimaLinha.criado_em}|${ultimaLinha.id}`
+    await setCursor(CURSOR_PAGAMENTOS, cursor)
     if (data.length < TAMANHO_PAGINA) return
   }
 }
