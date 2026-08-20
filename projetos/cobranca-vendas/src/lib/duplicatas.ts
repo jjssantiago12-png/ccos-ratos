@@ -10,7 +10,7 @@ export interface GrupoDuplicata {
 // vencimento já é forte indício de ser a MESMA parcela lançada duas vezes — mesmo
 // que "Data da Venda" tenha vindo diferente entre duas exportações do Líder (o que
 // faz a importação gerar um id novo em vez de atualizar o registro já existente).
-function chaveProvavel(venda: Venda): string {
+export function chaveProvavel(venda: Pick<Venda, 'cliente_nome' | 'valor_devido' | 'data_vencimento'>): string {
   const nome = venda.cliente_nome.trim().toLowerCase()
   const valor = venda.valor_devido.toFixed(2)
   return `${nome}|${valor}|${venda.data_vencimento}`

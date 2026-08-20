@@ -306,9 +306,6 @@ button {
   background: var(--vermelho);
 }
 
-.barra-sync button {
-  margin-left: auto;
-}
 
 .overlay {
   position: fixed;

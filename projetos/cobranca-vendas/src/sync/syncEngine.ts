@@ -24,6 +24,21 @@ export function getUltimoErroSync(): string | null {
   return ultimoErro
 }
 
+// Erro do Supabase (PostgrestError) não estende `Error` — `instanceof Error` falha e
+// `String(e)` num objeto plano vira o inútil "[object Object]". `.message` existe nos
+// dois casos (Error nativo e PostgrestError), então checa por ele direto.
+function mensagemDeErro(e: unknown): string {
+  if (e instanceof Error) return e.message
+  if (e && typeof e === 'object' && 'message' in e && typeof (e as { message: unknown }).message === 'string') {
+    return (e as { message: string }).message
+  }
+  try {
+    return JSON.stringify(e)
+  } catch {
+    return String(e)
+  }
+}
+
 async function pushPagamentos(): Promise<void> {
   const pendentes = await db.pagamentos.where('synced_at').equals(0).toArray()
   if (pendentes.length === 0) return
@@ -44,8 +59,15 @@ async function pushPagamentos(): Promise<void> {
   await db.pagamentos.bulkUpdate(pendentes.map((p) => ({ key: p.id, changes: { synced_at: agora } })))
 }
 
+/** Erros de linha (ex: uma venda com dado inválido pro schema) não devem travar as
+ * outras 575 atrás dela — sincroniza cada uma independente e só falha a sincronização
+ * inteira se TODAS as pendentes derem erro. As que passaram já ficam marcadas como
+ * sincronizadas; na próxima tentativa só sobra quem realmente precisa ser corrigida. */
 async function pushVendas(): Promise<void> {
   const pendentes = await db.vendas.where('synced_at').equals(0).toArray()
+  let sucessos = 0
+  const erros: string[] = []
+
   for (const v of pendentes) {
     const { error } = await supabase!.rpc('upsert_venda', {
       p_id: v.id,
@@ -62,8 +84,19 @@ async function pushVendas(): Promise<void> {
       p_created_at: v.created_at,
       p_updated_at: v.updated_at,
     })
-    if (error) throw error
+    if (error) {
+      erros.push(`${v.cliente_nome} (${mensagemDeErro(error)})`)
+      continue
+    }
     await db.vendas.update(v.id, { synced_at: Date.now() })
+    sucessos++
+  }
+
+  if (erros.length > 0) {
+    const amostra = erros.slice(0, 3).join(' · ')
+    throw new Error(
+      `${erros.length} de ${pendentes.length} vendas não sincronizaram (${sucessos} ok): ${amostra}${erros.length > 3 ? ' · ...' : ''}`
+    )
   }
 }
 
@@ -126,16 +159,33 @@ export async function sincronizar(): Promise<void> {
   if (emAndamento) return
   emAndamento = true
   notificar('sincronizando')
+  // push antes do pull, pra edição local em andamento não ser atropelada por um pull que
+  // ainda não a viu. Vendas SEMPRE antes de pagamentos — pagamentos.venda_id referencia
+  // vendas(id) no banco, então mandar um pagamento antes da venda dele existir no servidor
+  // quebra a foreign key e travava a sincronização inteira (bug real encontrado: vendas
+  // recém-importadas já vêm com um pagamento junto quando têm valor pago, e a ordem
+  // antiga tentava esse pagamento primeiro). Erro no push não impede o pull de rodar —
+  // mesmo se algumas vendas não sincronizarem, ainda vale trazer o que os outros já mandaram.
+  let erroPush: unknown = null
   try {
-    // push antes do pull, pra edição local em andamento não ser atropelada por um pull que ainda não a viu
-    await pushPagamentos()
     await pushVendas()
+  } catch (e) {
+    erroPush = e
+  }
+  try {
+    await pushPagamentos()
+  } catch (e) {
+    erroPush = erroPush ?? e
+  }
+
+  try {
     await pullVendas(await getCursor(CURSOR_VENDAS))
     await pullPagamentos(await getCursor(CURSOR_PAGAMENTOS))
+    if (erroPush) throw erroPush
     ultimoErro = null
     notificar('ocioso')
   } catch (e) {
-    ultimoErro = e instanceof Error ? e.message : String(e)
+    ultimoErro = mensagemDeErro(e)
     notificar('erro')
   } finally {
     emAndamento = false

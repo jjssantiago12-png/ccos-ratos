@@ -114,6 +114,19 @@ export async function importarVendasEPagamentos(vendas: Venda[], pagamentos: Pag
   })
 }
 
+/** Apaga TUDO local (vendas, pagamentos, cursor de sync) — usar antes de um novo pull
+ * completo pra garantir que o aparelho fica idêntico ao servidor, sem "zumbi" local de
+ * um id que não existe mais lá (ex: depois de uma limpeza de duplicata feita direto no
+ * banco). Só descarta o que já foi sincronizado; baixas/edições ainda pendentes
+ * (synced_at = 0) são perdidas — quem chama isso na UI precisa avisar disso antes. */
+export async function limparTudoLocal(): Promise<void> {
+  await db.transaction('rw', db.vendas, db.pagamentos, db.meta, async () => {
+    await db.vendas.clear()
+    await db.pagamentos.clear()
+    await db.meta.clear()
+  })
+}
+
 export async function contarPendentesSync(): Promise<number> {
   const [vendasPendentes, pagamentosPendentes] = await Promise.all([
     db.vendas.where('synced_at').equals(0).count(),

@@ -1,4 +1,5 @@
 import type { Venda, Pagamento, Origem } from '../types'
+import { chaveProvavel } from './duplicatas'
 
 export interface AvisoImportacao {
   linha: number
@@ -87,12 +88,33 @@ export async function importarPlanilhaControle(
   const avisos: AvisoImportacao[] = []
   const agora = new Date().toISOString()
 
-  const idsPorChaveExistente = new Map<string, string>()
+  // Índice pra reaproveitar id de venda já existente na hora de reimportar, em duas
+  // camadas:
+  // 1) chave ESTRITA (cliente+vencimento+valor+observações+origem+código) — match direto,
+  //    sem ambiguidade nenhuma, é o caminho normal quando nada mudou entre importações.
+  // 2) chave FROUXA (só cliente+valor+vencimento) como reserva, e só quando sobra
+  //    exatamente UMA venda existente com aquela combinação — cobre o caso de um
+  //    reexport do Líder reformatar o texto de observações (nº do pedido) da mesma
+  //    parcela, o que quebra o match estrito (bug real: sem essa reserva, a parcela
+  //    "sumia" do match e virava um registro novo a cada reexport, duplicando os 572
+  //    clientes inteiros quando o texto mudou entre duas importações).
+  // Se houver MAIS de uma venda existente com a mesma chave frouxa (ex: "Antonia Maria"
+  // tem duas parcelas reais de R$479,95 vencendo no mesmo dia, pedidos diferentes — a
+  // chave estrita já resolve as duas corretamente nesse caso), a reserva frouxa não tenta
+  // adivinhar qual é qual — prefere gerar um id novo (parcela vira "nova" só nesse caso
+  // raro e ambíguo, corrigível depois pelo Painel de Duplicatas) a arriscar misturar duas
+  // dívidas diferentes num id errado.
+  const idsPorChaveEstrita = new Map<string, string>()
+  const idsPorChaveFrouxa = new Map<string, string[]>()
   for (const v of vendasExistentes) {
-    idsPorChaveExistente.set(
+    idsPorChaveEstrita.set(
       chaveNegocio(v.origem, v.codigo_cliente, v.cliente_nome, v.data_vencimento, v.valor_devido, v.observacoes),
       v.id
     )
+    const chave = chaveProvavel(v)
+    const bucket = idsPorChaveFrouxa.get(chave)
+    if (bucket) bucket.push(v.id)
+    else idsPorChaveFrouxa.set(chave, [v.id])
   }
 
   for (let i = 0; i < linhas.length; i++) {
@@ -139,11 +161,22 @@ export async function importarPlanilhaControle(
       avisos.push({ linha: numeroLinha, cliente: nome, motivo: avisosLinha.join(', ') })
     }
 
-    // se já existe uma venda com essa mesma chave de negócio (mesmo que salva antes
-    // dessa mudança, com id calculado de outro jeito), reaproveita o id dela — assim a
-    // importação atualiza o registro existente em vez de criar um duplicado
-    const chave = chaveNegocio(origem, codigoCliente, nome, dataVencimento, valorDevido, observacoes)
-    const id = idsPorChaveExistente.get(chave) ?? (await idDeterministico(`venda|${chave}`))
+    const chaveEstrita = chaveNegocio(origem, codigoCliente, nome, dataVencimento, valorDevido, observacoes)
+    const chaveFrouxa = chaveProvavel({ cliente_nome: nome, valor_devido: valorDevido, data_vencimento: dataVencimento })
+
+    let id = idsPorChaveEstrita.get(chaveEstrita)
+    if (id) {
+      idsPorChaveEstrita.delete(chaveEstrita)
+      const bucket = idsPorChaveFrouxa.get(chaveFrouxa)
+      if (bucket) {
+        const pos = bucket.indexOf(id)
+        if (pos >= 0) bucket.splice(pos, 1)
+      }
+    } else {
+      const bucket = idsPorChaveFrouxa.get(chaveFrouxa)
+      if (bucket && bucket.length === 1) id = bucket.pop()
+    }
+    id ??= await idDeterministico(`venda|${chaveEstrita}`)
 
     vendas.push({
       id,
