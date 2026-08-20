@@ -19,6 +19,7 @@ function formatarDataHora(iso: string): string {
 export default function PainelDuplicatas({ vendas }: { vendas: Venda[] }) {
   const grupos = detectarDuplicatas(vendas)
   const [excluindo, setExcluindo] = useState<string | null>(null)
+  const [erro, setErro] = useState('')
 
   if (grupos.length === 0) {
     return <div className="valor-detalhe">Nenhuma duplicidade encontrada — mesma cliente, valor e vencimento aparecem só uma vez cada.</div>
@@ -29,9 +30,12 @@ export default function PainelDuplicatas({ vendas }: { vendas: Venda[] }) {
       `Excluir esse lançamento de ${venda.cliente_nome} (${formatarMoeda(venda.valor_devido)}, venceu ${formatarData(venda.data_vencimento)})? Essa ação não pode ser desfeita.`
     )
     if (!ok) return
+    setErro('')
     setExcluindo(venda.id)
     try {
       await excluirVenda(venda.id)
+    } catch (err) {
+      setErro(err instanceof Error ? err.message : 'Não consegui excluir essa venda.')
     } finally {
       setExcluindo(null)
     }
@@ -39,6 +43,7 @@ export default function PainelDuplicatas({ vendas }: { vendas: Venda[] }) {
 
   return (
     <div className="lista">
+      {erro && <div className="erro-texto">{erro}</div>}
       {grupos.map((grupo) => (
         <div key={grupo.chave} className="cartao">
           <div className="cartao-topo">
@@ -67,6 +72,12 @@ export default function PainelDuplicatas({ vendas }: { vendas: Venda[] }) {
                   {v.origem} · venda em {formatarData(v.data_venda)} · lançado {formatarDataHora(v.created_at)}
                   {v.codigo_cliente && ` · cód. ${v.codigo_cliente}`}
                   {v.observacoes && ` · ${v.observacoes}`}
+                  {v.valor_pago > 0 && (
+                    <>
+                      {' · '}
+                      <strong style={{ color: 'var(--acento)' }}>já recebeu {formatarMoeda(v.valor_pago)} — não dá pra excluir esse</strong>
+                    </>
+                  )}
                 </div>
                 <button
                   className="btn-secundario btn-pequeno"

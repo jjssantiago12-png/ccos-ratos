@@ -96,14 +96,28 @@ export async function listarVendas(): Promise<Venda[]> {
   return db.vendas.toArray()
 }
 
-/** Apaga uma venda e os pagamentos dela LOCALMENTE (efeito imediato na tela), e marca
- * a exclusão como pendente pro sync engine propagar (soft delete) pro servidor na
- * próxima sincronização — sem isso, a venda "voltava" pro aparelho no próximo pull
- * (bug real: era só local, o servidor nunca ficava sabendo). Usado pra limpar
- * duplicidade de lançamento, não é uma operação do dia a dia. */
+/** Apaga uma venda e marca a exclusão como pendente pro sync engine propagar (soft
+ * delete) pro servidor na próxima sincronização — sem isso, a venda "voltava" pro
+ * aparelho no próximo pull (bug real: era só local, o servidor nunca ficava sabendo).
+ * Usado pra limpar duplicidade de lançamento, não é uma operação do dia a dia.
+ *
+ * Bloqueia se a venda já tem algum pagamento: `pagamentos` é append-only por design
+ * (sem policy de DELETE, de propósito) e a exclusão da venda só faz soft-delete nela —
+ * apagar os pagamentos locais e excluir a venda deixaria esses pagamentos órfãos no
+ * servidor (continuam existindo, apontando pra uma venda que não existe mais em lugar
+ * nenhum), e esse dinheiro simplesmente some da contabilidade sem nenhum aviso. Cenário
+ * real: duas cópias duplicadas do MESMO cliente, uma delas já com baixa registrada —
+ * exatamente o padrão "Antonia Maria"/"Rosa Maria Goncalves" documentado no CLAUDE.md
+ * do projeto. Se precisar mesmo excluir uma venda com pagamento, é uma decisão manual
+ * direto no Supabase Studio (reatribuir o pagamento pra venda certa antes). */
 export async function excluirVenda(id: string): Promise<void> {
+  const pagamentos = await db.pagamentos.where('venda_id').equals(id).toArray()
+  if (pagamentos.length > 0) {
+    throw new Error(
+      'Essa venda já tem pagamento registrado — não dá pra excluir assim, o valor pago ficaria perdido. Se for mesmo duplicata, fala com quem administra o app antes.'
+    )
+  }
   await db.transaction('rw', db.vendas, db.pagamentos, db.meta, async () => {
-    await db.pagamentos.where('venda_id').equals(id).delete()
     await db.vendas.delete(id)
     await marcarExclusaoPendente(id)
   })

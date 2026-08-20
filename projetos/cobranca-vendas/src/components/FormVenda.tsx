@@ -77,6 +77,8 @@ export default function FormVenda({ vendaExistente, onFechar }: { vendaExistente
     try {
       await excluirVenda(vendaExistente.id)
       onFechar()
+    } catch (err) {
+      setErro(err instanceof Error ? err.message : 'Não consegui excluir essa venda.')
     } finally {
       setExcluindo(false)
     }

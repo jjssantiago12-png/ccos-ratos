@@ -198,12 +198,16 @@ export async function importarPlanilhaControle(
     // NOVAS (sem correspondente local) é que o valor pago da planilha vira o
     // pagamento inicial — é a única vez que ele representa informação nova.
     if (existente) {
+      // só avisa quando a planilha sabe de MAIS pagamento que o app (sinal real de uma
+      // baixa recebida fora do app, ainda não lançada aqui) — planilha sabendo de MENOS
+      // é o caso normal e esperado (é a fonte do Líder desatualizada em relação às
+      // baixas já dadas pelo app), não precisa de aviso nenhum
       const diferenca = round2(valorPagoPlanilha - existente.valor_pago)
-      if (Math.abs(diferenca) > 0.01) {
+      if (diferenca > 0.01) {
         avisos.push({
           linha: numeroLinha,
           cliente: nome,
-          motivo: `valor pago na planilha (${valorPagoPlanilha.toFixed(2)}) diferente do já registrado no app (${existente.valor_pago.toFixed(2)}) — mantive o do app, dá pra baixa a diferença manualmente se for o caso`,
+          motivo: `planilha mostra ${valorPagoPlanilha.toFixed(2)} pago, mas o app só tem ${existente.valor_pago.toFixed(2)} registrado — pode ter uma baixa de ${diferenca.toFixed(2)} feita fora do app ainda não lançada aqui`,
         })
       }
       vendas.push({

@@ -51,6 +51,10 @@ Depois de ligar o sync em produção, rodei um diagnóstico com 5 agentes (secur
 
 Migrations: `0001_init.sql` (schema inicial) → `0002_correcoes_diagnostico.sql` (atualizado_em, excluido_em, trigger insert/update/delete, constraints) → `0003_corrige_grant_valor_pago.sql` (conserta o REVOKE que não funcionava). As três já rodadas em produção.
 
+**Revisão final do code-reviewer sobre as correções acima achou mais 1 crítico, corrigido no mesmo dia:** `excluirVenda` apagava pagamentos só localmente — se a venda excluída já tinha pagamento sincronizado, esse pagamento ficava órfão no servidor (perdido, não conta pra nenhuma venda). Corrigido bloqueando a exclusão quando `valor_pago > 0` (erro claro na tela: "já tem pagamento registrado, fala com quem administra"), em `repo.ts` `excluirVenda`. `PainelDuplicatas.tsx` agora também mostra "já recebeu RX — não dá pra excluir esse" em cada linha, pra facilitar escolher a cópia certa pra manter. Também ajustado: aviso de reimportação com valor pago diferente só dispara quando a planilha sabe de MAIS pagamento que o app (sinal real de baixa não lançada), não quando sabe de menos (caso normal/esperado).
+
+**Achados de menor prioridade, registrados mas não corrigidos hoje** (ver `.claude/agent-memory/code-reviewer/project_cobranca_vendas_findings.md` pra detalhe completo): `upsert_venda` pode perder uma edição no last-write-wins sem avisar o usuário (só campos descritivos, nunca dinheiro); linha "falta X" em `CartaoPagamento.tsx` usa saldo de hoje em vez do saldo na época do pagamento histórico.
+
 ## Regras específicas
 - `valor_pago` de uma venda NUNCA é escrito diretamente — é sempre a soma de `pagamentos` (local e no servidor via trigger). Não adicionar campo de edição manual pra isso.
 - **Sync com Supabase está ATIVA em produção** desde 2026-08-19 — projeto `chntgifkzgnxfyjjbrek`, testado de ponta a ponta com dois "aparelhos" simulados (criar venda num, ver aparecer no outro, dar baixa, valor bater dos dois lados via o trigger). `VITE_SUPABASE_URL`/`VITE_SUPABASE_ANON_KEY` configuradas no Vercel (env de produção) e em `.env.local`.
