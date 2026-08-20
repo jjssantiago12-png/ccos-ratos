@@ -13,6 +13,16 @@ export default function HistoricoBaixas({
 }) {
   const vendasPorId = useMemo(() => new Map(vendas.map((v) => [v.id, v])), [vendas])
 
+  const pagamentosPorVenda = useMemo(() => {
+    const mapa = new Map<string, Pagamento[]>()
+    for (const p of pagamentos) {
+      const lista = mapa.get(p.venda_id)
+      if (lista) lista.push(p)
+      else mapa.set(p.venda_id, [p])
+    }
+    return mapa
+  }, [pagamentos])
+
   const ordenados = useMemo(() => {
     let lista = [...pagamentos].sort((a, b) => b.data.localeCompare(a.data))
     if (busca.trim()) {
@@ -29,7 +39,12 @@ export default function HistoricoBaixas({
   return (
     <div className="lista">
       {ordenados.map((p) => (
-        <CartaoPagamento key={p.id} pagamento={p} venda={vendasPorId.get(p.venda_id)} />
+        <CartaoPagamento
+          key={p.id}
+          pagamento={p}
+          venda={vendasPorId.get(p.venda_id)}
+          pagamentosDaVenda={pagamentosPorVenda.get(p.venda_id) ?? [p]}
+        />
       ))}
     </div>
   )

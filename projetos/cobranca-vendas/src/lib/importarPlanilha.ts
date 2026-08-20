@@ -49,6 +49,10 @@ function paraTexto(valor: unknown): string {
   return String(valor).trim()
 }
 
+function round2(n: number): number {
+  return Math.round(n * 100) / 100
+}
+
 // Chave de negócio SEM "data da venda" — o Líder pode reexportar a mesma parcela com
 // essa data recarimbada (ex: refletindo a última tentativa de cobrança), e se ela
 // entrasse na chave, a mesma dívida real virava um registro novo a cada reexport em
@@ -56,6 +60,10 @@ function paraTexto(valor: unknown): string {
 // "PED584-1/1") como desempate — cliente+vencimento+valor sozinhos colidem em casos
 // reais (duas vendas distintas da mesma cliente, coincidentemente mesmo valor e
 // vencimento, mas pedidos diferentes) e a data da venda não é confiável pro desempate.
+// valorDevido.toFixed(2): sem isso, o mesmo valor pode virar "479.95" numa importação e
+// "479.94999999999993" depois de passar pelo Postgres (numeric(10,2) → JSON → Number) —
+// a chave "muda" sozinha depois de um sync e reabre o mesmo bug de duplicação em massa
+// que já aconteceu uma vez. chaveProvavel (duplicatas.ts) já fazia esse .toFixed(2).
 function chaveNegocio(
   origem: Origem,
   codigoCliente: string,
@@ -64,7 +72,7 @@ function chaveNegocio(
   valorDevido: number,
   observacoes: string
 ): string {
-  return `${origem}|${codigoCliente}|${nome.trim().toLowerCase()}|${dataVencimento}|${valorDevido}|${observacoes.trim()}`
+  return `${origem}|${codigoCliente}|${nome.trim().toLowerCase()}|${dataVencimento}|${valorDevido.toFixed(2)}|${observacoes.trim()}`
 }
 
 export async function importarPlanilhaControle(
@@ -106,6 +114,7 @@ export async function importarPlanilhaControle(
   // dívidas diferentes num id errado.
   const idsPorChaveEstrita = new Map<string, string>()
   const idsPorChaveFrouxa = new Map<string, string[]>()
+  const vendasExistentesPorId = new Map<string, Venda>()
   for (const v of vendasExistentes) {
     idsPorChaveEstrita.set(
       chaveNegocio(v.origem, v.codigo_cliente, v.cliente_nome, v.data_vencimento, v.valor_devido, v.observacoes),
@@ -115,6 +124,7 @@ export async function importarPlanilhaControle(
     const bucket = idsPorChaveFrouxa.get(chave)
     if (bucket) bucket.push(v.id)
     else idsPorChaveFrouxa.set(chave, [v.id])
+    vendasExistentesPorId.set(v.id, v)
   }
 
   for (let i = 0; i < linhas.length; i++) {
@@ -131,8 +141,8 @@ export async function importarPlanilhaControle(
     const regiao = paraTexto(linha[3]) || '(conferir)'
     const bairro = paraTexto(linha[4])
     const codigoCliente = paraTexto(linha[6])
-    const valorDevido = paraNumero(linha[9])
-    const valorPago = paraNumero(linha[10])
+    const valorDevido = round2(paraNumero(linha[9]))
+    const valorPagoPlanilha = round2(paraNumero(linha[10]))
     const observacoes = paraTexto(linha[17])
     const origemTexto = paraTexto(linha[18])
     const origem: Origem = origemTexto === 'LIDER' ? 'LIDER' : 'Campo'
@@ -176,38 +186,76 @@ export async function importarPlanilhaControle(
       const bucket = idsPorChaveFrouxa.get(chaveFrouxa)
       if (bucket && bucket.length === 1) id = bucket.pop()
     }
+    const existente = id ? vendasExistentesPorId.get(id) : undefined
     id ??= await idDeterministico(`venda|${chaveEstrita}`)
 
-    vendas.push({
-      id,
-      cliente_nome: nome,
-      cliente_celular: celular,
-      regiao,
-      bairro,
-      codigo_cliente: codigoCliente,
-      data_venda: dataVenda,
-      data_vencimento: dataVencimento,
-      valor_devido: valorDevido,
-      valor_pago: valorPago,
-      data_ultimo_pagamento: paraISOData(linha[11]),
-      observacoes,
-      origem,
-      created_at: agora,
-      updated_at: agora,
-      synced_at: 0,
-    })
-
-    if (valorPago > 0) {
-      const idPagamento = await idDeterministico(`pagamento-importado|${id}`)
-      pagamentos.push({
-        id: idPagamento,
-        venda_id: id,
-        valor: valorPago,
-        data: paraISOData(linha[11]) ?? dataVenda,
-        observacao: 'Importado da planilha de campo',
-        registrado_por: 'Importação',
+    // Bug real corrigido: reimportar uma venda que JÁ existe não pode mexer em
+    // valor_pago nem criar um pagamento novo — isso já é feito pela soma dos
+    // pagamentos reais (registrarPagamento/trigger). Antes, reimportar sobrescrevia
+    // valor_pago com o número cru da planilha E criava um "pagamento-importado" de
+    // novo, então uma venda que já tinha recebido baixa pelo app contava esse valor
+    // em dobro (planilha + baixa manual) na próxima sincronização. Só em vendas
+    // NOVAS (sem correspondente local) é que o valor pago da planilha vira o
+    // pagamento inicial — é a única vez que ele representa informação nova.
+    if (existente) {
+      const diferenca = round2(valorPagoPlanilha - existente.valor_pago)
+      if (Math.abs(diferenca) > 0.01) {
+        avisos.push({
+          linha: numeroLinha,
+          cliente: nome,
+          motivo: `valor pago na planilha (${valorPagoPlanilha.toFixed(2)}) diferente do já registrado no app (${existente.valor_pago.toFixed(2)}) — mantive o do app, dá pra baixa a diferença manualmente se for o caso`,
+        })
+      }
+      vendas.push({
+        id,
+        cliente_nome: nome,
+        cliente_celular: celular,
+        regiao,
+        bairro,
+        codigo_cliente: codigoCliente,
+        data_venda: dataVenda,
+        data_vencimento: dataVencimento,
+        valor_devido: valorDevido,
+        valor_pago: existente.valor_pago,
+        data_ultimo_pagamento: existente.data_ultimo_pagamento,
+        observacoes,
+        origem,
+        created_at: existente.created_at,
+        updated_at: agora,
         synced_at: 0,
       })
+    } else {
+      vendas.push({
+        id,
+        cliente_nome: nome,
+        cliente_celular: celular,
+        regiao,
+        bairro,
+        codigo_cliente: codigoCliente,
+        data_venda: dataVenda,
+        data_vencimento: dataVencimento,
+        valor_devido: valorDevido,
+        valor_pago: valorPagoPlanilha,
+        data_ultimo_pagamento: paraISOData(linha[11]),
+        observacoes,
+        origem,
+        created_at: agora,
+        updated_at: agora,
+        synced_at: 0,
+      })
+
+      if (valorPagoPlanilha > 0) {
+        const idPagamento = await idDeterministico(`pagamento-importado|${id}`)
+        pagamentos.push({
+          id: idPagamento,
+          venda_id: id,
+          valor: valorPagoPlanilha,
+          data: paraISOData(linha[11]) ?? dataVenda,
+          observacao: 'Importado da planilha de campo',
+          registrado_por: 'Importação',
+          synced_at: 0,
+        })
+      }
     }
   }
 

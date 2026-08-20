@@ -1,9 +1,11 @@
 import { db, getCursor, setCursor } from '../db/dexie'
+import { listarExclusoesPendentesParaSync, removerExclusaoPendente } from '../db/repo'
 import { supabase, syncConfigurado } from './supabaseClient'
 import type { Venda, Pagamento } from '../types'
 
 const CURSOR_VENDAS = 'cursor_sync_vendas'
 const CURSOR_PAGAMENTOS = 'cursor_sync_pagamentos'
+const TAMANHO_PAGINA = 500
 
 export type SyncStatus = 'desligado' | 'ocioso' | 'sincronizando' | 'erro'
 
@@ -39,6 +41,21 @@ function mensagemDeErro(e: unknown): string {
   }
 }
 
+// Traduz os erros mais comuns (queda de conexão, projeto Supabase pausado por
+// inatividade — acontece sozinho depois de ~7 dias sem uso no plano gratuito) pra uma
+// frase que quem não é técnico entende e sabe o que fazer. Erros que não reconhece
+// aparecem como vieram, pra não esconder informação útil numa falha nova/rara.
+export function mensagemAmigavel(erroTecnico: string): string {
+  const texto = erroTecnico.toLowerCase()
+  if (texto.includes('failed to fetch') || texto.includes('networkerror') || texto.includes('load failed')) {
+    return 'sem internet no momento — vai sincronizar sozinho assim que voltar o sinal'
+  }
+  if (texto.includes('timeout') || texto.includes('timed out')) {
+    return 'conexão lenta demais agora — vai tentar de novo em instantes'
+  }
+  return `${erroTecnico} — se continuar acontecendo por muito tempo, o projeto na nuvem pode estar pausado por inatividade (avisa quem administra)`
+}
+
 async function pushPagamentos(): Promise<void> {
   const pendentes = await db.pagamentos.where('synced_at').equals(0).toArray()
   if (pendentes.length === 0) return
@@ -52,7 +69,14 @@ async function pushPagamentos(): Promise<void> {
     registrado_por: p.registrado_por,
   }))
 
-  const { error } = await supabase!.from('pagamentos').upsert(linhas, { onConflict: 'id' })
+  // ignoreDuplicates (ON CONFLICT DO NOTHING): pagamento é append-only por design — se o
+  // id já existe no servidor (ex: reimportar uma planilha manda de novo o mesmo
+  // "pagamento-importado"), a intenção é só confirmar que já está lá, nunca sobrescrever.
+  // Com onConflict simples (DO UPDATE) isso exigia uma policy de UPDATE que não existe
+  // de propósito nessa tabela — sem ignoreDuplicates, esse upsert dava erro de permissão
+  // e travava a sincronização de pagamentos inteira, incluindo baixas reais atrás dele
+  // na fila (bug real encontrado no diagnóstico).
+  const { error } = await supabase!.from('pagamentos').upsert(linhas, { onConflict: 'id', ignoreDuplicates: true })
   if (error) throw error
 
   const agora = Date.now()
@@ -100,55 +124,115 @@ async function pushVendas(): Promise<void> {
   }
 }
 
-async function pullVendas(cursor: string | null): Promise<void> {
-  let query = supabase!.from('vendas').select('*').order('updated_at', { ascending: true })
-  if (cursor) query = query.gt('updated_at', cursor)
-  const { data, error } = await query
-  if (error) throw error
-  if (!data || data.length === 0) return
+/** Propaga exclusões feitas localmente (ver `excluirVenda` em repo.ts) pro servidor via
+ * soft delete (`excluido_em`) — sem isso a venda apagada só sumia daquele aparelho e
+ * voltava no próximo pull, porque o servidor nunca ficava sabendo (bug real). */
+async function pushExclusoes(): Promise<void> {
+  const pendentes = await listarExclusoesPendentesParaSync()
+  if (pendentes.length === 0) return
 
-  const agora = Date.now()
-  const linhas: Venda[] = data.map((r) => ({
-    id: r.id,
-    cliente_nome: r.cliente_nome,
-    cliente_celular: r.cliente_celular,
-    regiao: r.regiao,
-    bairro: r.bairro,
-    codigo_cliente: r.codigo_cliente,
-    data_venda: r.data_venda,
-    data_vencimento: r.data_vencimento,
-    valor_devido: Number(r.valor_devido),
-    valor_pago: Number(r.valor_pago),
-    data_ultimo_pagamento: r.data_ultimo_pagamento,
-    observacoes: r.observacoes,
-    origem: r.origem,
-    created_at: r.created_at,
-    updated_at: r.updated_at,
-    synced_at: agora,
-  }))
-  await db.vendas.bulkPut(linhas)
-  await setCursor(CURSOR_VENDAS, data[data.length - 1].updated_at)
+  const agora = new Date().toISOString()
+  const falhas: string[] = []
+  for (const id of pendentes) {
+    const { error } = await supabase!.from('vendas').update({ excluido_em: agora, updated_at: agora }).eq('id', id)
+    if (error) {
+      falhas.push(id)
+      continue
+    }
+    await removerExclusaoPendente(id)
+  }
+  if (falhas.length > 0) {
+    throw new Error(`${falhas.length} exclusão(ões) ainda não confirmadas no servidor — tentando de novo`)
+  }
 }
 
-async function pullPagamentos(cursor: string | null): Promise<void> {
-  let query = supabase!.from('pagamentos').select('*').order('criado_em', { ascending: true })
-  if (cursor) query = query.gt('criado_em', cursor)
-  const { data, error } = await query
-  if (error) throw error
-  if (!data || data.length === 0) return
+/** Busca em páginas (Postgrest limita ~1000 linhas por resposta por padrão) — sem isso,
+ * uma carteira grande o bastante fazia o pull trazer só uma fatia, avançar o cursor além
+ * do que foi realmente salvo, e truncar o resto da carteira silenciosamente pra sempre
+ * (a carteira já bateu 1146 linhas uma vez, então isso é um risco real, não teórico).
+ * `.gte()` (inclusive) em vez de `.gt()`: reconsulta a última linha da página anterior de
+ * propósito — bulkPut é upsert por id, então isso é inofensivo — pra nunca pular uma
+ * linha que compartilhe o exato mesmo instante da fronteira da página. */
+async function pullVendas(cursorInicial: string | null): Promise<void> {
+  let cursor = cursorInicial
+  for (;;) {
+    let query = supabase!.from('vendas').select('*').order('atualizado_em', { ascending: true }).limit(TAMANHO_PAGINA)
+    if (cursor) query = query.gte('atualizado_em', cursor)
+    const { data, error } = await query
+    if (error) throw error
+    if (!data || data.length === 0) return
 
-  const agora = Date.now()
-  const linhas: Pagamento[] = data.map((r) => ({
-    id: r.id,
-    venda_id: r.venda_id,
-    valor: Number(r.valor),
-    data: r.data,
-    observacao: r.observacao,
-    registrado_por: r.registrado_por,
-    synced_at: agora,
-  }))
-  await db.pagamentos.bulkPut(linhas)
-  await setCursor(CURSOR_PAGAMENTOS, data[data.length - 1].criado_em)
+    const agora = Date.now()
+    const paraSalvar: Venda[] = []
+    const idsParaRemover: string[] = []
+    for (const r of data) {
+      // excluido_em preenchido = venda apagada por alguém (ver pushExclusoes/excluirVenda)
+      // — remove localmente em vez de trazer de volta pra tela.
+      if (r.excluido_em) {
+        idsParaRemover.push(r.id)
+        continue
+      }
+      paraSalvar.push({
+        id: r.id,
+        cliente_nome: r.cliente_nome,
+        cliente_celular: r.cliente_celular,
+        regiao: r.regiao,
+        bairro: r.bairro,
+        codigo_cliente: r.codigo_cliente,
+        data_venda: r.data_venda,
+        data_vencimento: r.data_vencimento,
+        valor_devido: Number(r.valor_devido),
+        valor_pago: Number(r.valor_pago),
+        data_ultimo_pagamento: r.data_ultimo_pagamento,
+        observacoes: r.observacoes,
+        origem: r.origem,
+        created_at: r.created_at,
+        updated_at: r.updated_at,
+        synced_at: agora,
+      })
+    }
+
+    await db.transaction('rw', db.vendas, db.pagamentos, async () => {
+      if (paraSalvar.length > 0) await db.vendas.bulkPut(paraSalvar)
+      for (const id of idsParaRemover) {
+        await db.pagamentos.where('venda_id').equals(id).delete()
+        await db.vendas.delete(id)
+      }
+    })
+
+    const ultimo = data[data.length - 1].atualizado_em
+    cursor = ultimo
+    await setCursor(CURSOR_VENDAS, ultimo)
+    if (data.length < TAMANHO_PAGINA) return
+  }
+}
+
+async function pullPagamentos(cursorInicial: string | null): Promise<void> {
+  let cursor = cursorInicial
+  for (;;) {
+    let query = supabase!.from('pagamentos').select('*').order('criado_em', { ascending: true }).limit(TAMANHO_PAGINA)
+    if (cursor) query = query.gte('criado_em', cursor)
+    const { data, error } = await query
+    if (error) throw error
+    if (!data || data.length === 0) return
+
+    const agora = Date.now()
+    const linhas: Pagamento[] = data.map((r) => ({
+      id: r.id,
+      venda_id: r.venda_id,
+      valor: Number(r.valor),
+      data: r.data,
+      observacao: r.observacao,
+      registrado_por: r.registrado_por,
+      synced_at: agora,
+    }))
+    await db.pagamentos.bulkPut(linhas)
+
+    const ultimo = data[data.length - 1].criado_em
+    cursor = ultimo
+    await setCursor(CURSOR_PAGAMENTOS, ultimo)
+    if (data.length < TAMANHO_PAGINA) return
+  }
 }
 
 export async function sincronizar(): Promise<void> {
@@ -177,6 +261,11 @@ export async function sincronizar(): Promise<void> {
   } catch (e) {
     erroPush = erroPush ?? e
   }
+  try {
+    await pushExclusoes()
+  } catch (e) {
+    erroPush = erroPush ?? e
+  }
 
   try {
     await pullVendas(await getCursor(CURSOR_VENDAS))
@@ -185,7 +274,7 @@ export async function sincronizar(): Promise<void> {
     ultimoErro = null
     notificar('ocioso')
   } catch (e) {
-    ultimoErro = mensagemDeErro(e)
+    ultimoErro = mensagemAmigavel(mensagemDeErro(e))
     notificar('erro')
   } finally {
     emAndamento = false

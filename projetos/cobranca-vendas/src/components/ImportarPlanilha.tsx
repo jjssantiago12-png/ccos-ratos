@@ -29,8 +29,13 @@ export default function ImportarPlanilha({ onFechar }: { onFechar: () => void })
   async function confirmar() {
     if (!resultado) return
     setEtapa('importando')
-    await importarVendasEPagamentos(resultado.vendas, resultado.pagamentos)
-    setEtapa('concluido')
+    try {
+      await importarVendasEPagamentos(resultado.vendas, resultado.pagamentos)
+      setEtapa('concluido')
+    } catch (err) {
+      setErro(err instanceof Error ? err.message : 'Não consegui salvar a importação.')
+      setEtapa('revisar')
+    }
   }
 
   return (
@@ -57,6 +62,7 @@ export default function ImportarPlanilha({ onFechar }: { onFechar: () => void })
               <strong>{resultado.vendas.length}</strong> vendas prontas pra importar, de {resultado.totalLinhas}{' '}
               linhas na planilha.
             </p>
+            {erro && <div className="erro-texto">{erro}</div>}
             {resultado.avisos.length > 0 && (
               <div className="campo">
                 <label>{resultado.avisos.length} linha(s) com algum detalhe pra revisar depois:</label>

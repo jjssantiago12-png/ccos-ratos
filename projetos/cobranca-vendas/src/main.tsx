@@ -2,6 +2,7 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { registerSW } from 'virtual:pwa-register'
 import App from './App'
+import ErroFatal from './components/ErroFatal'
 import './index.css'
 
 // registerType 'autoUpdate' + immediate: true faz a nova versão assumir e recarregar
@@ -11,6 +12,8 @@ registerSW({ immediate: true })
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <App />
+    <ErroFatal>
+      <App />
+    </ErroFatal>
   </React.StrictMode>
 )

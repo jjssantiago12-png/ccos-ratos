@@ -1,5 +1,29 @@
-import { db, novoId, agoraISO } from './dexie'
+import { db, novoId, agoraISO, getCursor, setCursor } from './dexie'
 import type { Venda, Pagamento, Origem } from '../types'
+
+const CHAVE_EXCLUSOES_PENDENTES = 'exclusoes_pendentes'
+
+async function listarExclusoesPendentes(): Promise<string[]> {
+  const valor = await getCursor(CHAVE_EXCLUSOES_PENDENTES)
+  return valor ? (JSON.parse(valor) as string[]) : []
+}
+
+async function marcarExclusaoPendente(id: string): Promise<void> {
+  const atuais = await listarExclusoesPendentes()
+  if (!atuais.includes(id)) await setCursor(CHAVE_EXCLUSOES_PENDENTES, JSON.stringify([...atuais, id]))
+}
+
+/** Chamado pelo sync engine depois de confirmar a exclusão no servidor. */
+export async function removerExclusaoPendente(id: string): Promise<void> {
+  const atuais = await listarExclusoesPendentes()
+  await setCursor(CHAVE_EXCLUSOES_PENDENTES, JSON.stringify(atuais.filter((x) => x !== id)))
+}
+
+/** Usado pelo sync engine pra saber quais exclusões locais ainda precisam ser
+ * propagadas (soft delete) pro servidor. */
+export async function listarExclusoesPendentesParaSync(): Promise<string[]> {
+  return listarExclusoesPendentes()
+}
 
 export interface NovaVendaInput {
   cliente_nome: string
@@ -72,12 +96,16 @@ export async function listarVendas(): Promise<Venda[]> {
   return db.vendas.toArray()
 }
 
-/** Apaga uma venda e os pagamentos dela. Só local (sem sync na nuvem ativo ainda) —
- * usado pra limpar duplicidade de lançamento, não é uma operação do dia a dia. */
+/** Apaga uma venda e os pagamentos dela LOCALMENTE (efeito imediato na tela), e marca
+ * a exclusão como pendente pro sync engine propagar (soft delete) pro servidor na
+ * próxima sincronização — sem isso, a venda "voltava" pro aparelho no próximo pull
+ * (bug real: era só local, o servidor nunca ficava sabendo). Usado pra limpar
+ * duplicidade de lançamento, não é uma operação do dia a dia. */
 export async function excluirVenda(id: string): Promise<void> {
-  await db.transaction('rw', db.vendas, db.pagamentos, async () => {
+  await db.transaction('rw', db.vendas, db.pagamentos, db.meta, async () => {
     await db.pagamentos.where('venda_id').equals(id).delete()
     await db.vendas.delete(id)
+    await marcarExclusaoPendente(id)
   })
 }
 
