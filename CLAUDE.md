@@ -75,6 +75,10 @@ Ao concluir uma tarefa que não tinha skill mas parece repetível (o usuário pr
 
 > "Isso pode virar uma skill pra próxima vez. Quer que eu crie?"
 
+### Time de agentes especialistas (código)
+
+Além das skills, `.claude/agents/` tem 10 subagentes especialistas em desenvolvimento de software (instalados em 2026-08-20, relevantes principalmente pra projetos de app como `projetos/cobranca-vendas/`): `code-reviewer`, `test-runner`, `debugger`, `backend-architect`, `frontend-developer`, `security-auditor`, `performance-engineer`, `devops-troubleshooter`, `docs-writer`, `orchestrator`. O comando `/melhorar <pedido>` roda o pipeline completo (avaliação → diagnóstico → melhorias → conferência) via `orchestrator`. Acionam automaticamente pelo `description` de cada um, ou chamando direto com `@nome-do-agente`.
+
 Não perguntar pra tarefas pontuais ou perguntas simples. Só quando o padrão de repetição for claro.
 
 ---
